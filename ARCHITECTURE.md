@@ -1,4 +1,4 @@
-# Home Assistant Pro Setup — Architecture
+# Castellan — Architecture
 
 **Version:** 0.3  
 **Status:** Design phase — complete, not yet built.  

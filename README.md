@@ -1,12 +1,12 @@
-# Home Assistant Pro Setup
+# Castellan
 
-A reference architecture for a **fully local, open-source smart home** built around Home Assistant, a local LLM for voice, and Claude as the configuration and build assistant. No cloud dependency in everyday operation, and no internet exposure of the home.
+**A local-AI architecture for Home Assistant** — a fully local, open-source smart home with an AI layer. No cloud dependency in everyday operation, and no internet exposure of the home.
 
 > **Status:** Design phase — architecture complete, not yet built.
 
 ## The idea
 
-Home Assistant is powerful but remains a DIY project: complex setup, no one-click installer, and voice assistants that lag. Modern local AI plus an AI coding assistant close most of those gaps without giving up local control or privacy. This repo captures the architecture for doing that on cheap, dedicated, always-on hardware.
+Home Assistant is powerful but remains a DIY project: complex setup, no one-click installer, and voice assistants that lag. Modern local AI plus an AI coding assistant close most of those gaps without giving up local control or privacy. Castellan captures the architecture for doing that on cheap, dedicated, always-on hardware.
 
 ## Core design decisions
 
@@ -50,4 +50,8 @@ This is a design document, not a tested deployment. Hardware specifics drift —
 
 ## License
 
-Not yet specified.
+MIT — see [LICENSE](LICENSE).
+
+---
+
+*Castellan is an independent community project. It is not affiliated with, endorsed by, or sponsored by Home Assistant or the Open Home Foundation. "Home Assistant" is a trademark of the Open Home Foundation.*
