@@ -50,7 +50,7 @@ This is a design document, not a tested deployment. Hardware specifics drift —
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](LICENSE).
 
 ---
 
