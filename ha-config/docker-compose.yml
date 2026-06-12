@@ -1,0 +1,37 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2025.6.3
+    container_name: homeassistant
+    restart: always
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    mem_limit: 1536m
+    cpus: "1.5"
+
+  wyoming-piper:
+    image: rhasspy/wyoming-piper
+    container_name: wyoming-piper
+    restart: always
+    network_mode: host
+    volumes:
+      - ./piper-data:/data
+    command: --uri tcp://0.0.0.0:10200 --voice da_DK-talesyntese-medium --data-dir /data
+
+  wyoming-speech-to-phrase:
+    image: rhasspy/wyoming-speech-to-phrase
+    container_name: wyoming-speech-to-phrase
+    restart: always
+    network_mode: host
+    volumes:
+      - ./stp-models:/models
+      - ./stp-train:/train
+    command: >-
+      --hass-token ${HASS_TOKEN}
+      --hass-websocket-uri ws://localhost:8123/api/websocket
+      --retrain-on-start

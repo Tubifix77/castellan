@@ -1,0 +1,12 @@
+homeassistant:
+  name: Home
+  unit_system: metric
+  currency: DKK
+  country: DK
+  time_zone: Europe/Copenhagen
+
+default_config:
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

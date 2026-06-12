@@ -1,0 +1,17 @@
+[Unit]
+Description=HA Voice Assistant (faster-whisper wake word)
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=boas
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStartPre=-/usr/bin/pactl --server=unix:/run/user/1000/pulse/native set-card-profile alsa_card.pci-0000_00_1b.0 output:analog-stereo+input:analog-stereo
+ExecStartPre=-/usr/bin/pactl --server=unix:/run/user/1000/pulse/native set-source-port alsa_input.pci-0000_00_1b.0.analog-stereo analog-input-mic
+ExecStart=/home/boas/ha-voice-venv/bin/python3 /home/boas/homeassistant/ha_voice.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
