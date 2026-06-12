@@ -1,10 +1,16 @@
 # Castellan — Architecture
 
-**Version:** 0.4
-**Status:** Design phase — nearly build-ready. No code yet.
-**Last reviewed:** 2026-06-11
+**Version:** 0.5
+**Status:** Build phase — roadmap steps 1–4 deployed and working on the host; steps 5+ (warm path, escalation) remain design.
+**Last reviewed:** 2026-06-13
 
 ## Changelog
+
+**v0.5 (2026-06-13):**
+- **Steps 1–4 shipped.** HA Container, the Claude bridge (MCP + SSH), three WiZ bulbs, and the voice core run on the laptop. A snapshot of the working config lives in [`ha-config/`](ha-config/).
+- **Voice core as-built diverges from the v0.4 design (§6).** openWakeWord and wyoming-satellite are out — the wake word never triggered reliably on this hardware/accent. Wake + STT now run in one custom loop (`ha-config/ha_voice.py`) on faster-whisper `base` (int8, CPU): biased decoding for the wake word, fuzzy entity normalization for commands, HA Conversation REST for intent, Wyoming Piper for TTS. Speech-to-Phrase stays deployed for HA's own Assist pipeline but the live loop bypasses it.
+- **Latency honesty (§3, §15).** Deterministic intent matching is still LLM-free and instant, but as-built STT costs seconds of CPU; wake-to-action measures ~12 s. Speech-to-Phrase remains the documented sub-100 ms upgrade path for known phrases.
+- **Legend extended** with DEPLOYED for as-built facts of the running system.
 
 **v0.4 (2026-06-11):**
 - **Single host.** Castellan runs entirely on one always-on machine — the Debian laptop. The gaming PC is explicitly **out of the runtime** (it must not be a dependency that runs the house at random times); its only role is build-time (Claude Desktop, testing).
@@ -19,6 +25,7 @@
 ## Legend
 - VERIFIED — confirmed against a cited source (see Sources).
 - REC — recommendation / design choice derived from the reference setup and the verified facts.
+- DEPLOYED — as-built fact of the running system (config tracked in [`ha-config/`](ha-config/)).
 
 ---
 
@@ -37,7 +44,7 @@ Three concerns, deliberately separated:
 
 | Where | Role | Runs |
 |---|---|---|
-| **Debian laptop** (x86, always-on) — *the host* | Everything | HA, Mosquitto, Piper (TTS), Whisper.cpp / Speech-to-Phrase (STT), the local small LLM (CPU), all as background services |
+| **Debian laptop** (x86, always-on) — *the host* | Everything | HA, Piper (TTS), faster-whisper (wake word + STT, as deployed), Speech-to-Phrase (HA Assist pipeline), the local small LLM (CPU, step 5), all as background services; Mosquitto when the first MQTT device arrives |
 | **Gaming PC (RTX)** | **Build-time only — never runtime** | Where you sit to build Castellan: Claude Desktop, testing. Must not run any part of the live house. |
 | **ESP32 xN** (WiFi, ESPHome) | Edge / satellites | BLE proxy, voice satellite, displays. Wake-word can run on the satellite. |
 | **Cloud free-tier LLM** (APEX-style) | Escalation only, optional | Reached only for hard free-form queries that pass the egress boundary (section 4). Off -> house still works. |
@@ -53,7 +60,7 @@ Three concerns, deliberately separated:
 
 A spoken request walks up only as far as it needs to:
 
-1. **Hot — deterministic (~95%).** HA's sentence matcher + Speech-to-Phrase handle known commands ("turn off the lights") in under 100 ms. No LLM, no network. Scripted, local, instant. **VERIFIED**
+1. **Hot — deterministic (~95%).** HA's sentence matcher resolves known commands ("turn off the lights") with no LLM and no network. **VERIFIED** As deployed, the STT in front of it is faster-whisper on CPU, so wake-to-action measures ~12 s — the intent match is instant, the transcription isn't. **DEPLOYED** Speech-to-Phrase (grammar-based, sub-100 ms on modest hardware **VERIFIED**) remains the latency upgrade path for known phrases.
 2. **Warm — local small LLM.** Free-form the local model can manage. A small model on the laptop CPU (NPU later). Local, private; on old hardware, *slow* — seconds, not instant. That's acceptable: free-form is the "ask and wait a moment" feature, not the daily driver.
 3. **Escalation — APEX-style cloud, optional.** When the local model can't answer a hard free-form question well, escalate to a free-tier cloud LLM (APEX-style key/provider rotation). Subject to the egress boundary (section 4) and graceful fallback. **REC**
 
@@ -91,11 +98,13 @@ This is the deliberate trade Castellan makes: locality is the default and the pr
 
 ## 6. Voice pipeline (local on the laptop)
 
-Wyoming protocol glues these as local services HA combines into one Assist pipeline:
-- **openWakeWord** — wake word; light, can also run on the ESP32 satellite.
-- **Speech-to-Phrase** (hot STT) — grammar-based, fast on modest hardware; carries tier 1. **VERIFIED**
-- **Whisper.cpp** (warm STT) — free-form transcription on the laptop CPU (`base`/`small`). **VERIFIED**
-- **Piper** (TTS) — fast on CPU/SBC, many voices; a GLaDOS voice is a community model. **VERIFIED**
+**As deployed (step 4):** one custom loop — [`ha-config/ha_voice.py`](ha-config/ha_voice.py), a systemd service — owns the mic and does wake word + STT with **faster-whisper `base`** (int8, CPU). **DEPLOYED**
+- **Wake** ("computer"): 2 s sliding windows with overlap, decoding biased toward the wake word. (openWakeWord never triggered reliably here, and whisper-`tiny` mangles the accent — `base` + bias is what works.)
+- **Command capture:** adaptive noise floor — the mic line carries constant hum/hiss, so chunks are high-passed at 250 Hz and silence is detected relative to a rolling floor, with a single filter pass over the whole utterance before transcription.
+- **Intent:** fuzzy entity normalization (rebuild the garbled transcript as a canonical "turn on/off \<entity\>"), then HA's Conversation REST API — deterministic, no LLM.
+- **Reply:** Wyoming **Piper** TTS (`en_US-lessac-medium`), played locally; the mic is drained afterwards so the loop can't wake on its own voice.
+
+**Still deployed alongside (Wyoming):** **Piper** (TTS, above — fast on CPU/SBC, many voices; a GLaDOS voice is a community model **VERIFIED**) and **Speech-to-Phrase**, wired into HA's own Assist pipeline (UI/companion voice) but bypassed by the live loop; it remains the sub-100 ms STT option for known phrases. **VERIFIED**
 
 All STT/TTS stays local regardless of escalation — only *text* from tier 2/3 ever leaves (section 4).
 
@@ -174,10 +183,11 @@ No autonomous rewrites. (The voice escalation in sections 3-4 is a separate chan
 ## 14. Voice flow — "turn off the living-room lights"
 
 ```
-Wake (ESP32 / laptop)
-  -> Speech-to-Phrase (laptop, hot)
-  -> Intent match (HA, laptop)         -> done (instant, local)
-     | (only if free-form / no match)
+Wake "computer" (laptop mic, faster-whisper)        [as deployed]
+  -> chime; capture until silence (adaptive floor)
+  -> faster-whisper base STT + fuzzy entity normalization
+  -> HA Conversation API intent match  -> act (deterministic, local)
+     | (only if free-form / no match — step 5, not yet built)
   -> local small LLM (laptop, warm)    -> answer if it can
      | (only if too hard AND passes egress boundary, section 4)
   -> cloud free-tier LLM (escalation)  -> answer, else graceful fallback
@@ -191,7 +201,7 @@ Wake (ESP32 / laptop)
 | Gap | How |
 |---|---|
 | Complex setup, YAML errors | Claude writes/validates config via SSH |
-| Voice latency (2-4 s) | Speech-to-Phrase handles ~95% instantly; LLM only for free-form |
+| Voice latency (2-4 s) | Deterministic intents stay LLM-free; as-built whisper STT costs seconds — Speech-to-Phrase is the documented instant path for known phrases |
 | Custom hardware firmware | ESPHome skill: describe board -> complete YAML |
 | Random always-on dependency | Single always-on host (laptop); gaming PC excluded |
 | Hard free-form on weak hardware | Slow-escalation: local first, optional bounded cloud burst |
@@ -202,10 +212,10 @@ Wake (ESP32 / laptop)
 
 ## Roadmap
 
-1. **HA on the laptop** (Docker), `/config` under git. Background service, restart-on-boot.
-2. **Claude bridge:** HA MCP server + `mcp-proxy` + long-lived token.
-3. **One radio + a few devices** (Zigbee USB or an ESP32 BLE proxy).
-4. **Deterministic voice core** — Speech-to-Phrase + Piper + wake word. The usable MVP: instant control + status. *Ship this first.*
+1. **HA on the laptop** (Docker), `/config` under git. Background service, restart-on-boot. ✅ *shipped 2026-06*
+2. **Claude bridge:** HA MCP server + `mcp-proxy` + long-lived token. ✅ *shipped 2026-06*
+3. **One radio + a few devices.** ✅ *shipped 2026-06 — three WiZ WiFi bulbs; no Zigbee radio yet*
+4. **Deterministic voice core** — the usable MVP: voice control + status. ✅ *shipped 2026-06-13, as-built per §6 (faster-whisper loop + Piper; Speech-to-Phrase held in reserve)*
 5. **Warm path** — local small LLM behind the OpenAI-compatible seam; resource-capped.
 6. **Escalation (optional)** — APEX-style cloud tier behind the egress boundary; toggle.
 7. **Skills + automations** — HA/ESPHome skills; first real automations via Claude.
@@ -225,4 +235,4 @@ Retrieved 2026-06-06. VERIFIED items are backed by these.
 7. ESPHome **Bluetooth Proxy** (BLE only): https://esphome.io/components/bluetooth_proxy/
 8. RK3588 vs RK3588S (difference is I/O, not NPU/CPU/GPU/memory): Radxa wiki
 
-Host model (single laptop; SoC as future), the slow-escalation query path, the egress boundary, and the background-service/resource design are REC items derived from the setup and verified facts. Verify NPU setup and `mcp-proxy` flags against upstream when building.
+Host model (single laptop; SoC as future), the slow-escalation query path, the egress boundary, and the background-service/resource design are REC items derived from the setup and verified facts. The as-built voice loop (§6) is DEPLOYED fact, tracked in `ha-config/`, not a sourced claim. Verify NPU setup and `mcp-proxy` flags against upstream when building.
