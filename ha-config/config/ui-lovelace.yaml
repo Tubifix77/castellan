@@ -1,0 +1,26 @@
+title: Home
+views:
+  - title: Lights
+    icon: mdi:home-lightbulb
+    cards:
+      - type: entities
+        title: Lights
+        entities:
+          - entity: light.wiz_dimmable_white_36a80c
+            name: Living Room Standing Lamp
+          - entity: light.wiz_rgbw_tunable_150b1e
+            name: Livs Lampe
+          - entity: light.wiz_dimmable_white_367014
+            name: Soveværelse
+
+      - type: light
+        entity: light.wiz_dimmable_white_36a80c
+        name: Living Room Standing Lamp
+
+      - type: light
+        entity: light.wiz_rgbw_tunable_150b1e
+        name: Livs Lampe
+
+      - type: light
+        entity: light.wiz_dimmable_white_367014
+        name: Soveværelse
