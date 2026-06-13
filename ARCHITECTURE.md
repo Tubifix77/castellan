@@ -1,10 +1,13 @@
 # Castellan — Architecture
 
-**Version:** 0.5
-**Status:** Build phase — roadmap steps 1–4 deployed and working on the host; steps 5+ (warm path, escalation) remain design.
+**Version:** 0.6
+**Status:** Build phase — roadmap steps 1–5 deployed and working on the host; step 6+ (escalation) remains design.
 **Last reviewed:** 2026-06-13
 
 ## Changelog
+
+**v0.6 (2026-06-13):**
+- **Step 5 shipped — warm path.** Ollama (Docker, `restart=always`, 2 CPU / 1.5 GB RAM cap) serves `qwen2.5:1.5b` at `localhost:11434`. `ha_voice.py` escalates to Ollama directly (OpenAI `/v1/chat/completions`) whenever HA's conversation API returns `response_type: error` — this covers both `no_intent_match` and `no_valid_targets`. Portability seam: `OLLAMA_URL` + `OLLAMA_MODEL` constants in `ha_voice.py`, one-line swap when the backend changes. Cold-start ~22 s on CPU, warm ~4 s.
 
 **v0.5 (2026-06-13):**
 - **Steps 1–4 shipped.** HA Container, the Claude bridge (MCP + SSH), three WiZ bulbs, and the voice core run on the laptop. A snapshot of the working config lives in [`ha-config/`](ha-config/).
@@ -216,7 +219,7 @@ Wake "computer" (laptop mic, faster-whisper)        [as deployed]
 2. **Claude bridge:** HA MCP server + `mcp-proxy` + long-lived token. ✅ *shipped 2026-06*
 3. **One radio + a few devices.** ✅ *shipped 2026-06 — three WiZ WiFi bulbs; no Zigbee radio yet*
 4. **Deterministic voice core** — the usable MVP: voice control + status. ✅ *shipped 2026-06-13, as-built per §6 (faster-whisper loop + Piper; Speech-to-Phrase held in reserve)*
-5. **Warm path** — local small LLM behind the OpenAI-compatible seam; resource-capped.
+5. **Warm path** — local small LLM behind the OpenAI-compatible seam; resource-capped. ✅ *shipped 2026-06-13 — Ollama + qwen2.5:1.5b; ha_voice.py escalates to Ollama on any HA intent error*
 6. **Escalation (optional)** — APEX-style cloud tier behind the egress boundary; toggle.
 7. **Skills + automations** — HA/ESPHome skills; first real automations via Claude.
 8. **Later:** migrate to a dedicated SoC (repoint one URL); energy management.
