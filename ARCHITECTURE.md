@@ -1,13 +1,13 @@
 # Castellan — Architecture
 
 **Version:** 0.6
-**Status:** Build phase — roadmap steps 1–5 deployed and working on the host; step 6+ (escalation) remains design.
+**Status:** Build phase — roadmap steps 1–6 deployed and working on the host; step 7+ (automations, dashboard) remains design.
 **Last reviewed:** 2026-06-13
 
 ## Changelog
 
 **v0.6 (2026-06-13):**
-- **Step 5 shipped — warm path.** Ollama (Docker, `restart=always`, 2 CPU / 1.5 GB RAM cap) serves `qwen2.5:1.5b` at `localhost:11434`. `ha_voice.py` escalates to Ollama directly (OpenAI `/v1/chat/completions`) whenever HA's conversation API returns `response_type: error` — this covers both `no_intent_match` and `no_valid_targets`. Portability seam: `OLLAMA_URL` + `OLLAMA_MODEL` constants in `ha_voice.py`, one-line swap when the backend changes. Cold-start ~22 s on CPU, warm ~4 s.
+- **Steps 5 and 6 shipped — warm path + cloud escalation.** Ollama (Docker, `restart=always`, 2 CPU / 1.5 GB RAM cap) serves `qwen2.5:1.5b` at `localhost:11434`. `ha_voice.py` escalates to Ollama directly (OpenAI `/v1/chat/completions`) whenever HA's conversation API returns `response_type: error`. If Ollama's answer contains uncertainty phrases, and the query passes the egress boundary (no home-state/security keywords), it escalates further to OpenRouter (`openai/gpt-oss-20b:free`). Portability seams: `OLLAMA_URL`/`OLLAMA_MODEL` and `OPENROUTER_URL`/`OPENROUTER_MODEL` constants. `ESCALATION_ENABLED` toggle. Cold-start ~22 s on CPU, warm ~4 s; cloud adds ~5 s.
 
 **v0.5 (2026-06-13):**
 - **Steps 1–4 shipped.** HA Container, the Claude bridge (MCP + SSH), three WiZ bulbs, and the voice core run on the laptop. A snapshot of the working config lives in [`ha-config/`](ha-config/).
@@ -220,7 +220,7 @@ Wake "computer" (laptop mic, faster-whisper)        [as deployed]
 3. **One radio + a few devices.** ✅ *shipped 2026-06 — three WiZ WiFi bulbs; no Zigbee radio yet*
 4. **Deterministic voice core** — the usable MVP: voice control + status. ✅ *shipped 2026-06-13, as-built per §6 (faster-whisper loop + Piper; Speech-to-Phrase held in reserve)*
 5. **Warm path** — local small LLM behind the OpenAI-compatible seam; resource-capped. ✅ *shipped 2026-06-13 — Ollama + qwen2.5:1.5b; ha_voice.py escalates to Ollama on any HA intent error*
-6. **Escalation (optional)** — APEX-style cloud tier behind the egress boundary; toggle.
+6. **Escalation (optional)** — APEX-style cloud tier behind the egress boundary; toggle. ✅ *shipped 2026-06-13 — OpenRouter (openai/gpt-oss-20b:free); ESCALATION_ENABLED toggle; egress boundary enforced*
 7. **Skills + automations** — HA/ESPHome skills; first real automations via Claude.
 8. **Later:** migrate to a dedicated SoC (repoint one URL); energy management.
 
