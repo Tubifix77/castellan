@@ -1,7 +1,7 @@
 # Castellan — Architecture
 
 **Version:** 0.6
-**Status:** Build phase — roadmap steps 1–6 deployed and working on the host; step 7+ (automations, dashboard) remains design.
+**Status:** Build phase — roadmap steps 1–7 deployed and working on the host. Step 8 (SoC migration, energy management) is a future hardware project.
 **Last reviewed:** 2026-06-13
 
 ## Changelog
