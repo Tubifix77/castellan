@@ -1,0 +1,9 @@
+language: "en"
+intents:
+  GoodNight:
+    data:
+      - sentences:
+          - "goodnight"
+          - "good night"
+          - "lights off"
+          - "turn off everything"
