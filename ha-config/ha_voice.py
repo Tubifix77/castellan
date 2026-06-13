@@ -55,17 +55,42 @@ HA_URL       = "http://localhost:8123"
 OLLAMA_URL   = "http://localhost:11434/v1/chat/completions"  # portability seam
 OLLAMA_MODEL = "qwen2.5:1.5b"
 
+ESCALATION_ENABLED = True
+OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL   = "openai/gpt-oss-20b:free"
+
+# Queries matching this pattern touch home state / security — must not leave the LAN
+_EGRESS_DENY = re.compile(
+    r"\b(door|lock|unlock|alarm|camera|motion sensor|who.?s home|"
+    r"occupan|securit|armed|disarm|is.{1,20}(on|off|open|closed|locked)|"
+    r"status of|temperature in|humidity in)\b",
+    re.IGNORECASE,
+)
+# Phrases that signal the local model is uncertain / can't answer well
+_UNCERTAIN = re.compile(
+    r"\b(i don.?t know|i.?m not sure|i cannot|i.?m not able|"
+    r"as an ai.{0,30}(not|cannot|can.?t)|don.?t have (access|information|data))\b",
+    re.IGNORECASE,
+)
+
 # Whisper mangles entity names ("standing lamp" -> "standing in length"),
 # so transcripts get fuzzy-corrected against the real names afterwards.
 ENTITIES = ["living room standing lamp", "livs lampe", "soveværelse light"]
 
 
-def _token() -> str:
+def _load_env() -> tuple[str, str]:
+    """Return (hass_token, openrouter_key). OR key is "" if not configured."""
+    hass, orkey = "", ""
     with open("/home/boas/homeassistant/.env") as f:
         for line in f:
-            if line.startswith("HASS_TOKEN="):
-                return line.strip().split("=", 1)[1]
-    raise RuntimeError("HASS_TOKEN not found in .env")
+            k, _, v = line.strip().partition("=")
+            if k == "HASS_TOKEN":
+                hass = v
+            elif k == "OPENROUTER_API_KEY":
+                orkey = v
+    if not hass:
+        raise RuntimeError("HASS_TOKEN not found in .env")
+    return hass, orkey
 
 
 def _open_mic() -> subprocess.Popen:
@@ -150,7 +175,7 @@ def _fuzzy_fix(cmd: str) -> str:
     return " ".join(words)
 
 
-def _converse(tok: str, text: str) -> str:
+def _converse(tok: str, or_key: str, text: str) -> str:
     req = urllib.request.Request(
         f"{HA_URL}/api/conversation/process",
         data=json.dumps({"text": text, "language": "en"}).encode(),
@@ -160,11 +185,23 @@ def _converse(tok: str, text: str) -> str:
     with urllib.request.urlopen(req, timeout=10) as r:
         d = json.loads(r.read())
     resp = d.get("response", {})
-    if resp.get("response_type") == "error":
-        log.info("HA error (%s) — escalating to local LLM",
-                 resp.get("data", {}).get("code", "?"))
-        return _converse_llm(text)
-    return resp.get("speech", {}).get("plain", {}).get("speech", "")
+    if resp.get("response_type") != "error":
+        return resp.get("speech", {}).get("plain", {}).get("speech", "")
+
+    log.info("HA error (%s) — escalating to local LLM",
+             resp.get("data", {}).get("code", "?"))
+    answer = _converse_llm(text)
+
+    if (ESCALATION_ENABLED and or_key
+            and not _EGRESS_DENY.search(text)
+            and _UNCERTAIN.search(answer)):
+        log.info("Local LLM uncertain — escalating to cloud")
+        try:
+            answer = _converse_cloud(text, or_key)
+        except Exception as exc:
+            log.warning("Cloud escalation failed, using local answer: %s", exc)
+
+    return answer
 
 
 def _converse_llm(text: str) -> str:
@@ -179,6 +216,24 @@ def _converse_llm(text: str) -> str:
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=60) as r:
+        d = json.loads(r.read())
+    return d.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+
+def _converse_cloud(text: str, api_key: str) -> str:
+    """Tier-3 escalation: OpenRouter. Text-only, general knowledge only."""
+    req = urllib.request.Request(
+        OPENROUTER_URL,
+        data=json.dumps({
+            "model": OPENROUTER_MODEL,
+            "messages": [{"role": "user", "content": text}],
+        }).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
         d = json.loads(r.read())
     return d.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
@@ -222,7 +277,9 @@ def _speak(tok: str, text: str) -> None:
 
 
 def main() -> None:
-    tok = _token()
+    tok, or_key = _load_env()
+    if ESCALATION_ENABLED and not or_key:
+        log.warning("ESCALATION_ENABLED but OPENROUTER_API_KEY not set — cloud tier disabled")
     log.info("Loading faster-whisper base model…")
     cmd_model = WhisperModel("base", device="cpu", compute_type="int8")
     log.info("Ready — say '%s' to activate.", WAKE_WORD)
@@ -281,7 +338,7 @@ def main() -> None:
             log.info("Command: %r -> %r", raw, command)
 
             if command:
-                reply = _converse(tok, command)
+                reply = _converse(tok, or_key, command)
                 log.info("Reply: %s", reply)
                 if reply:
                     _speak(tok, reply)
