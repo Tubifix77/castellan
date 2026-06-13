@@ -51,7 +51,9 @@ FLOOR_SEED         = 0.033 # measured idle floor, used until enough samples
 PA_MIC = "alsa_input.pci-0000_00_1b.0.analog-stereo"
 PA_SPK = "alsa_output.pci-0000_00_1b.0.analog-stereo"
 PA_ENV = {**os.environ, "PULSE_SERVER": "unix:/run/user/1000/pulse/native"}
-HA_URL = "http://localhost:8123"
+HA_URL       = "http://localhost:8123"
+OLLAMA_URL   = "http://localhost:11434/v1/chat/completions"  # portability seam
+OLLAMA_MODEL = "qwen2.5:1.5b"
 
 # Whisper mangles entity names ("standing lamp" -> "standing in length"),
 # so transcripts get fuzzy-corrected against the real names afterwards.
@@ -157,10 +159,28 @@ def _converse(tok: str, text: str) -> str:
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         d = json.loads(r.read())
-    return (d.get("response", {})
-             .get("speech", {})
-             .get("plain", {})
-             .get("speech", ""))
+    resp = d.get("response", {})
+    if resp.get("response_type") == "error":
+        log.info("HA error (%s) — escalating to local LLM",
+                 resp.get("data", {}).get("code", "?"))
+        return _converse_llm(text)
+    return resp.get("speech", {}).get("plain", {}).get("speech", "")
+
+
+def _converse_llm(text: str) -> str:
+    """Warm-path fallback: direct Ollama call, no HA entity context."""
+    req = urllib.request.Request(
+        OLLAMA_URL,
+        data=json.dumps({
+            "model": OLLAMA_MODEL,
+            "messages": [{"role": "user", "content": text}],
+            "stream": False,
+        }).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=60) as r:
+        d = json.loads(r.read())
+    return d.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
 
 def _speak(tok: str, text: str) -> None:

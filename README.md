@@ -2,7 +2,7 @@
 
 **A local-AI architecture for Home Assistant** — a fully local, single-host smart home with an AI layer. Everyday operation never leaves the LAN; the internet is touched only as an optional, bounded last resort for hard free-form questions.
 
-> **Status:** Build phase (architecture v0.5). Roadmap steps 1–4 are deployed — the voice core works end-to-end on the host. Steps 5+ (warm path, escalation) remain design.
+> **Status:** Build phase (architecture v0.6). Roadmap steps 1–5 are deployed — voice core + warm LLM path work end-to-end on the host. Step 6+ (escalation) remains design.
 
 ## The idea
 
@@ -45,8 +45,8 @@ A visual, single-file HTML version of the architecture also exists and can be ad
 2. The Claude bridge: HA MCP server + `mcp-proxy` + long-lived token. ✅
 3. One radio + a few real devices. ✅ *(three WiZ WiFi bulbs; no Zigbee radio yet)*
 4. **Deterministic voice core** — the usable MVP: voice control + status. ✅ *shipped 2026-06-13* (as-built: faster-whisper wake+STT loop + Piper; see ARCHITECTURE.md §6)
-5. Warm path — local small LLM behind the OpenAI-compatible seam, resource-capped. ← *next*
-6. Escalation (optional) — APEX-style cloud tier behind the egress boundary; a toggle.
+5. Warm path — local small LLM behind the OpenAI-compatible seam, resource-capped. ✅ *shipped 2026-06-13* (Ollama + qwen2.5:1.5b; direct fallback in ha_voice.py)
+6. Escalation (optional) — APEX-style cloud tier behind the egress boundary; a toggle. ← *next*
 7. Skills + the first real automations and dashboard.
 8. Later: migrate to a dedicated SoC (repoint one URL); energy management.
 
