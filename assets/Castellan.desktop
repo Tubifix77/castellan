@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Castellan
+Comment=Start the Castellan smart home system
+Exec=xterm -title "Castellan" -bg "#0a0e0f" -fg "#00e5cc" -fa "Monospace" -fs 11 -e /home/boas/castellan-start.sh
+Icon=/home/boas/.local/share/icons/castellan.svg
+Terminal=false
+Categories=Utility;
+StartupNotify=false
