@@ -10,3 +10,12 @@ default_config:
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
+
+intent_script:
+  GoodNight:
+    action:
+      - action: light.turn_off
+        target:
+          entity_id: light.wiz_dimmable_white_36a80c
+    speech:
+      text: "Good night! Lamp turned off."
