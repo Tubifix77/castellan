@@ -1,58 +1,79 @@
 # Castellan
 
-**A local-AI architecture for Home Assistant** — a fully local, single-host smart home with an AI layer. Everyday operation never leaves the LAN; the internet is touched only as an optional, bounded last resort for hard free-form questions.
+**A fully local smart home built on Home Assistant** — voice control, a small on-device LLM, and Claude as the build assistant. No cloud dependency in everyday operation, no internet exposure of the home.
 
-> **Status:** Build phase (architecture v0.6). Roadmap steps 1–7 are deployed and working — full voice pipeline, warm + cloud LLM path, dashboard, and first voice commands. Step 8 (SoC migration, energy management) is a future hardware project.
+> **Status:** Complete (v0.5) — running on a Debian laptop. Step 8 (SoC migration) deferred.
 
-## The idea
+## What it does
 
-Home Assistant is powerful but remains a DIY project: complex setup, no one-click installer, and voice assistants that lag. Modern local AI plus an AI coding assistant close most of those gaps without giving up local control or privacy. Castellan captures the architecture for doing that on one cheap, always-on machine — built to migrate to a dedicated low-power SoC later with no rework.
+Say **"computer"** → beep → speak a command → the house responds.
+
+- **Light control:** "turn on the living room standing lamp", "dim the lights", "goodnight"
+- **Free-form questions:** anything HA can't match falls through to a local LLM (Ollama qwen2.5:1.5b)
+- **All local:** faster-whisper STT, Piper TTS, Ollama — nothing leaves the LAN in daily use
 
 ## Core design decisions
 
-- **Single always-on host.** The whole stack runs on one Debian laptop. The gaming PC is **excluded from the runtime** (a house can't depend on a machine that's off or busy at random) — it's build-time only.
-- **Slow-escalation query path**, by how hard the request is:
-  - *Hot* (~95%): HA deterministic intents — no LLM, no network. (As deployed, the whisper STT in front costs seconds; Speech-to-Phrase is the documented instant path for known phrases.)
-  - *Warm*: a small local LLM (CPU now, NPU later). Free-form, local, slow-ish on old hardware.
-  - *Escalation* (optional): an APEX-style free-tier cloud model for the rare hard question — behind a strict egress boundary.
-- **Egress boundary** for the one path that leaves the LAN: text only (never audio), general-knowledge only (never home state, security, or control), redacted, opt-in, with graceful fallback so the house never breaks when the internet is down.
-- **Voice runs entirely locally.** As deployed: a faster-whisper wake-word + STT loop with Piper TTS replies; Speech-to-Phrase stays wired into HA's own Assist pipeline (see ARCHITECTURE.md §6).
-- **Portable by architecture:** HA's conversation agent points at one OpenAI-compatible endpoint. Localhost CPU model now; an Orange Pi 5 Pro (RK3588S, 6 TOPS NPU) is a documented, zero-rework future migration — relocate the stack, repoint one URL.
-- **Claude, two channels (build/repair only, never the live loop):** HA's official MCP server (`mcp-proxy` + token) for live control, SSH for editing `/config`.
-- **Self-healing is human-gated** (detect → propose → you approve) — a separate channel from the voice escalation, deliberately not a free-tier rig.
-- **Runs as a background service:** auto-start, headless, restart-on-failure, resource-capped to coexist with another always-on workload on the same box.
+- **Single always-on host** — the whole stack runs on one Debian laptop. The gaming PC is excluded from the runtime entirely.
+- **Three-path AI**, by how often each fires:
+  - *Hot* (~95%): HA deterministic intents. Sub-100 ms, no LLM.
+  - *Warm*: local qwen2.5:1.5b via Ollama for free-form speech. Fully local.
+  - *Escalation* (optional, off by default): APEX-style free-tier cloud behind a strict egress boundary — text only, general knowledge only, never home state or audio.
+- **Voice pipeline:** PulseAudio → parecord → 250 Hz HPF → faster-whisper base int8 → fuzzy entity match → HA Conversation API → Piper TTS → mpg123. ~12 s end-to-end.
+- **Claude, two channels (build/repair only):** HA's official MCP server (`mcp-proxy` + long-lived token) for live control, SSH for editing `/config`.
+- **Self-healing is human-gated** — detect → propose → approve. Never autonomous.
+- **Portable by architecture:** one OpenAI-compatible endpoint. Move to an Orange Pi 5 Pro (RK3588S, 6 TOPS NPU) by relocating the stack and repointing one URL — no code changes.
 
 ## Reference hardware
 
 | Role | Device | Notes |
 |------|--------|-------|
-| **The host (now)** | Debian laptop (x86, always-on) | Runs everything; shared with another service → resource caps |
-| Build-time only | Gaming PC (RTX) | Claude Desktop + testing; never runs the live house |
+| **The host** | Debian 12 laptop (x86, always-on) | Runs everything; shared with another service → resource caps |
 | Future target | Orange Pi 5 Pro (RK3588S, 6 TOPS NPU) | Silent, ~10 W; NPU makes free-form fast; zero-rework migration |
-| Edge / satellites | ESP32 (×N) | BLE proxy, voice satellite, displays |
-| Build assistant | Claude Desktop | `mcp-proxy` → HA + SSH to `/config` |
+| Gaming PC | Build-time only | Claude Desktop + testing; never runs the live house |
+| Edge | ESP32 (×N) | BLE proxy, voice satellite, displays (future) |
 
-## Documents
+## What's running
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — the full architecture (v0.5), section by section, with verified facts, recommendations, and as-built deployment marked.
-- [`ha-config/`](ha-config/) — snapshot of the working deployment: compose file, the voice loop (`ha_voice.py`), systemd unit, HA config. Secrets stay on the host (see its README).
+| Service | How | Port |
+|---------|-----|------|
+| Home Assistant | Docker (2025.6.3) | 8123 |
+| wyoming-piper | Docker | 10200 |
+| wyoming-speech-to-phrase | Docker | 10300 |
+| Ollama (qwen2.5:1.5b) | Docker | 11434 |
+| ha-voice | systemd | — |
 
-A visual, single-file HTML version of the architecture also exists and can be added under `docs/` if wanted.
+Started and stopped manually via the desktop icons (not autostart).
+
+## Devices
+
+- Living room Standing Lamp — WiZ, `192.168.0.130`
+- Livs lampe — WiZ, `192.168.86.234`
+- Soveværelse Light — WiZ, `192.168.86.236`
+
+## Documents and assets
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — full spec (v0.5), VERIFIED / REC / DEPLOYED tags
+- [`ha-config/`](ha-config/) — deployed HA config snapshot (docker-compose, ha_voice.py, systemd unit)
+- [`assets/`](assets/) — desktop launcher icons and scripts (cyan = start, orange = stop)
 
 ## Roadmap
 
-1. Home Assistant on the laptop (Docker), `/config` under git; running as a background service. ✅
-2. The Claude bridge: HA MCP server + `mcp-proxy` + long-lived token. ✅
-3. One radio + a few real devices. ✅ *(three WiZ WiFi bulbs; no Zigbee radio yet)*
-4. **Deterministic voice core** — the usable MVP: voice control + status. ✅ *shipped 2026-06-13* (as-built: faster-whisper wake+STT loop + Piper; see ARCHITECTURE.md §6)
-5. Warm path — local small LLM behind the OpenAI-compatible seam, resource-capped. ✅ *shipped 2026-06-13* (Ollama + qwen2.5:1.5b; direct fallback in ha_voice.py)
-6. Escalation (optional) — APEX-style cloud tier behind the egress boundary; a toggle. ✅ *shipped 2026-06-13* (OpenRouter; egress boundary; ESCALATION_ENABLED toggle)
-7. Skills + the first real automations and dashboard. ✅ *shipped 2026-06-13* (Lovelace dashboard, goodnight voice intent)
-8. Later: migrate to a dedicated SoC (repoint one URL); energy management.
+- ✅ Step 1 — HA on laptop, Docker, git-tracked config
+- ✅ Step 2 — Claude MCP bridge
+- ✅ Step 3 — WiZ bulbs (local, no cloud)
+- ✅ Step 4 — Deterministic voice core
+- ✅ Step 5 — Warm path (Ollama local LLM)
+- ✅ Step 6 — Custom intents ("goodnight" etc.)
+- ✅ Step 7 — Desktop launchers (start/stop icons)
+- ⏳ Step 8 — Migrate to dedicated SoC; energy management
 
 ## Notes
 
-Steps 1–4 are a real, running deployment (snapshot in `ha-config/`); the later tiers are still design. Hardware specifics drift — verify NPU driver setup (`rkllm` / `rkllama`) and the current `mcp-proxy` flags against upstream when you build. Sources for the verified claims are listed in `ARCHITECTURE.md`.
+- HA pinned to `2025.6.3` (Python 3.13.3) — do not upgrade to `stable`, Python 3.14 has an epoll/UDP regression that breaks WiZ and voice
+- Token stored in `/home/boas/homeassistant/.env` on the laptop only — never in git
+- ALC269VC audio chip: HDMI output and headphone jack are mutually exclusive (hardware limitation, not a bug)
+- `ha-config/` is a snapshot — re-sync manually when laptop files change
 
 ## License
 
