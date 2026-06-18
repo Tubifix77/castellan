@@ -10,7 +10,8 @@ Say **"computer"** → beep → speak a command → the house responds.
 
 - **Light control:** "turn on the living room standing lamp", "dim the lights", "goodnight"
 - **Free-form questions:** anything HA can't match falls through to a local LLM (Ollama qwen2.5:1.5b)
-- **All local:** faster-whisper STT, Piper TTS, Ollama — nothing leaves the LAN in daily use
+- **Optional cloud escalation:** press E at startup for a 5-second opt-in window — routes hard questions to a free-tier cloud LLM behind a strict egress boundary. Off by default.
+- **All local by default:** faster-whisper STT, Piper TTS, Ollama — nothing leaves the LAN unless you opted in
 
 ## Core design decisions
 
@@ -18,7 +19,7 @@ Say **"computer"** → beep → speak a command → the house responds.
 - **Three-path AI**, by how often each fires:
   - *Hot* (~95%): HA deterministic intents. Sub-100 ms, no LLM.
   - *Warm*: local qwen2.5:1.5b via Ollama for free-form speech. Fully local.
-  - *Escalation* (optional, off by default): APEX-style free-tier cloud behind a strict egress boundary — text only, general knowledge only, never home state or audio.
+  - *Escalation* (opt-in): free-tier cloud LLM behind a strict egress boundary — text only, general knowledge only, never home state or audio. Enabled at startup via 5-second countdown.
 - **Voice pipeline:** PulseAudio → parecord → 250 Hz HPF → faster-whisper base int8 → fuzzy entity match → HA Conversation API → Piper TTS → mpg123. ~12 s end-to-end.
 - **Claude, two channels (build/repair only):** HA's official MCP server (`mcp-proxy` + long-lived token) for live control, SSH for editing `/config`.
 - **Self-healing is human-gated** — detect → propose → approve. Never autonomous.
@@ -43,7 +44,7 @@ Say **"computer"** → beep → speak a command → the house responds.
 | Ollama (qwen2.5:1.5b) | Docker | 11434 |
 | ha-voice | systemd | — |
 
-Started and stopped manually via the desktop icons (not autostart).
+Started and stopped manually via the desktop icons — not autostart.
 
 ## Devices
 
@@ -51,11 +52,20 @@ Started and stopped manually via the desktop icons (not autostart).
 - Livs lampe — WiZ, `192.168.86.234`
 - Soveværelse Light — WiZ, `192.168.86.236`
 
+## Desktop launchers
+
+Two icons on the Debian desktop (xfce4-terminal):
+
+| Icon | Colour | Action |
+|------|--------|--------|
+| Castellan | Cyan castle, glowing orb | Starts all services. 5-second countdown — press **E** to enable cloud escalation, anything else (or timeout) = local only. |
+| Castellan Stop | Orange castle, power symbol | Stops all services cleanly. |
+
 ## Documents and assets
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — full spec (v0.5), VERIFIED / REC / DEPLOYED tags
 - [`ha-config/`](ha-config/) — deployed HA config snapshot (docker-compose, ha_voice.py, systemd unit)
-- [`assets/`](assets/) — desktop launcher icons and scripts (cyan = start, orange = stop)
+- [`assets/`](assets/) — desktop launcher icons (SVG) and scripts
 
 ## Roadmap
 
@@ -65,8 +75,8 @@ Started and stopped manually via the desktop icons (not autostart).
 - ✅ Step 4 — Deterministic voice core
 - ✅ Step 5 — Warm path (Ollama local LLM)
 - ✅ Step 6 — Custom intents ("goodnight" etc.)
-- ✅ Step 7 — Desktop launchers (start/stop icons)
-- ⏳ Step 8 — Migrate to dedicated SoC; energy management
+- ✅ Step 7 — Desktop launchers + opt-in cloud escalation at startup
+- ⏳ Step 8 — Wire escalation into ha_voice.py; migrate to dedicated SoC; energy management
 
 ## Notes
 
@@ -74,6 +84,7 @@ Started and stopped manually via the desktop icons (not autostart).
 - Token stored in `/home/boas/homeassistant/.env` on the laptop only — never in git
 - ALC269VC audio chip: HDMI output and headphone jack are mutually exclusive (hardware limitation, not a bug)
 - `ha-config/` is a snapshot — re-sync manually when laptop files change
+- Cloud escalation flag written to `/tmp/castellan_escalation` at startup — `ha_voice.py` wiring is step 8
 
 ## License
 
