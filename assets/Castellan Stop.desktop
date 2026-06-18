@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Castellan Stop
+Comment=Stop all Castellan smart home services
+Exec=xterm -title "Castellan Stop" -bg "#0a0e0f" -fg "#ff6b35" -fa "Monospace" -fs 11 -e /home/boas/castellan-stop.sh
+Icon=/home/boas/.local/share/icons/castellan-stop.svg
+Terminal=false
+Categories=Utility;
+StartupNotify=false
