@@ -1,10 +1,15 @@
 # Castellan — Architecture
 
-**Version:** 0.6
+**Version:** 0.7
 **Status:** Build phase — roadmap steps 1–7 deployed and working on the host. Step 8 (SoC migration, energy management) is a future hardware project.
-**Last reviewed:** 2026-06-13
+**Last reviewed:** 2026-08-06
 
 ## Changelog
+
+**v0.7 (2026-08-06):** — two lifecycle/boundary defects found in the running system and fixed.
+- **The two halves of Castellan had independent lifecycles (§10).** `castellan-stop.sh` called a bare `systemctl stop`, which is transient, while the unit stayed `enabled` — so `ha_voice.py` returned on the next boot and ran unattended for ~7 weeks after Castellan was "stopped", holding the mic. Start/stop now own `enable --now`/`disable --now`, matching `compose up -d`/`compose down`, and both scripts print `is-enabled` so the persistent state is visible. The unit gained `Requires=docker.service` + `After=docker.service`.
+- **The escalation opt-in was not wired up (§4).** The start script wrote the choice to `/tmp/castellan_escalation`; nothing read it, and `ESCALATION_ENABLED` was hard-coded `True`. The prompt was theatre and the cloud tier was armed regardless. Now read from `/run/castellan/escalation`, fail-closed (only an explicit `1` enables it), and when off the API key is blanked at startup so there is no single point left to bypass. No egress actually occurred — the journal records zero escalations for the whole period.
+- **Rejected:** a `ConditionPathExists` marker gating the unit. Enabled-state is already systemd's persistent record of "should this run"; a marker file is a second source of truth for the same fact, and when the two disagree the unit skips *silently* (a failed Condition is recorded as skipped, not failed). `Requires=docker.service` covers the dependency case in a way systemd actually surfaces.
 
 **v0.6 (2026-06-13):**
 - **Steps 5 and 6 shipped — warm path + cloud escalation.** Ollama (Docker, `restart=always`, 2 CPU / 1.5 GB RAM cap) serves `qwen2.5:1.5b` at `localhost:11434`. `ha_voice.py` escalates to Ollama directly (OpenAI `/v1/chat/completions`) whenever HA's conversation API returns `response_type: error`. If Ollama's answer contains uncertainty phrases, and the query passes the egress boundary (no home-state/security keywords), it escalates further to OpenRouter (`openai/gpt-oss-20b:free`). Portability seams: `OLLAMA_URL`/`OLLAMA_MODEL` and `OPENROUTER_URL`/`OPENROUTER_MODEL` constants. `ESCALATION_ENABLED` toggle. Cold-start ~22 s on CPU, warm ~4 s; cloud adds ~5 s.
@@ -82,6 +87,8 @@ Tier-3 escalation is the only part of Castellan that touches the internet, so it
 - **Redaction.** Names, addresses, and identifiers are stripped before egress.
 - **Graceful fallback.** If the cloud tier is rate-limited, down, or offline, fall back to the local model's best attempt or an honest "I can't answer that right now." The house never breaks because the internet is unavailable — only the rare hard query degrades.
 - **Opt-in and configurable.** Escalation is a toggle. Off -> Castellan is 100% local and simply gives smaller answers to hard questions. Provider(s) and keys via an APEX-style keychain.
+  - **Fail closed, and per launch.** DEPLOYED The start script writes the choice to `/run/castellan/escalation`; `ha_voice.py` reads it at startup and treats *anything* other than an explicit `1` — missing file, `0`, empty, garbage — as local-only. `/run` is tmpfs, so a reboot drops the opt-in rather than inheriting a decision made weeks earlier. The gate is single: when escalation is off the OpenRouter key is blanked in memory at startup, so there is no key to reach the network with.
+  - *This bit us:* the toggle was theatre for its first seven weeks. The start script wrote the flag to `/tmp` and nothing ever read it — `ESCALATION_ENABLED` was hard-coded `True`, so the tier was armed regardless of what the user chose. Nothing actually left the LAN (the journal records zero escalations), but only because the resurrected loop was never successfully spoken to.
 - **Provider terms are a config-time choice.** Free tiers differ on whether they train on inputs; pick accordingly, knowing only non-sensitive general-knowledge text ever leaves.
 
 This is the deliberate trade Castellan makes: locality is the default and the principle; the cloud is a bounded, optional escape hatch for capability on hard questions — not a pipe for the room's audio.
@@ -149,6 +156,8 @@ Two channels, both human-driven, never in the live loop:
 
 Castellan runs as a **dedicated background service**, not something you launch. **REC**
 - **Auto-start, headless, restart-on-failure** — Docker `restart=always` (and/or systemd units for non-container pieces). Survives reboots, runs with no one logged in.
+- **Both halves share one lifecycle, and "stopped" must be persistent.** DEPLOYED Castellan is two halves — the compose stack and the `ha-voice` systemd unit — so start/stop must own both or the halves drift apart. The rule: the start/stop scripts are the only lifecycle entry points, and they use `systemctl enable --now` / `disable --now`, never a bare `start`/`stop`. A bare `stop` is transient, so an enabled unit silently returns on the next boot; `enable`/`disable` gives systemd the same semantics `compose up -d`/`compose down` already has — the *chosen* state, not the current one, is what survives a reboot. The unit additionally declares `Requires=docker.service` + `After=docker.service`, so it can never start ahead of the stack it depends on and goes down with the daemon.
+  - *This bit us:* a bare `systemctl stop` in the stop script left the unit enabled, so `ha_voice.py` came back on the next boot and ran unattended for roughly seven weeks, holding the mic open, after Castellan had been "stopped."
 - **Resource caps — load-bearing, not an afterthought.** The laptop already runs another always-on service (a separate creature project). Two always-on workloads on old hardware is fine *if* bounded: the small LLM is the heavy one, so it gets a small model + CPU/RAM limits so it can't starve the other service. The deterministic hot path is cheap and unaffected.
 - **The real limiter is RAM/cores, not CUDA.** HA + Whisper + Piper + a small LLM + the other service on an old box is doable with discipline; the LLM size is the dial that matters.
 

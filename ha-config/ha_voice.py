@@ -55,7 +55,10 @@ HA_URL       = "http://localhost:8123"
 OLLAMA_URL   = "http://localhost:11434/v1/chat/completions"  # portability seam
 OLLAMA_MODEL = "qwen2.5:1.5b"
 
-ESCALATION_ENABLED = True
+# Cloud escalation is opt-in per launch (§4). The start script writes this flag;
+# /run is tmpfs, so a reboot resets to local-only rather than silently inheriting
+# an opt-in the user made weeks ago. Missing flag = local-only.
+ESCALATION_FLAG    = "/run/castellan/escalation"
 OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL   = "openai/gpt-oss-20b:free"
 
@@ -91,6 +94,15 @@ def _load_env() -> tuple[str, str]:
     if not hass:
         raise RuntimeError("HASS_TOKEN not found in .env")
     return hass, orkey
+
+
+def _escalation_enabled() -> bool:
+    """Fail closed: anything other than an explicit "1" means local-only."""
+    try:
+        with open(ESCALATION_FLAG) as f:
+            return f.read().strip() == "1"
+    except OSError:
+        return False
 
 
 def _open_mic() -> subprocess.Popen:
@@ -192,7 +204,7 @@ def _converse(tok: str, or_key: str, text: str) -> str:
              resp.get("data", {}).get("code", "?"))
     answer = _converse_llm(text)
 
-    if (ESCALATION_ENABLED and or_key
+    if (or_key                      # blanked at startup unless opted in
             and not _EGRESS_DENY.search(text)
             and _UNCERTAIN.search(answer)):
         log.info("Local LLM uncertain — escalating to cloud")
@@ -278,8 +290,13 @@ def _speak(tok: str, text: str) -> None:
 
 def main() -> None:
     tok, or_key = _load_env()
-    if ESCALATION_ENABLED and not or_key:
-        log.warning("ESCALATION_ENABLED but OPENROUTER_API_KEY not set — cloud tier disabled")
+    if not _escalation_enabled():
+        or_key = ""   # single gate: no key in hand, no path off the LAN
+        log.info("Cloud escalation: DISABLED (local-only)")
+    elif not or_key:
+        log.warning("Cloud escalation opted in but OPENROUTER_API_KEY not set — local-only")
+    else:
+        log.info("Cloud escalation: ENABLED (opted in this launch)")
     log.info("Loading faster-whisper base model…")
     cmd_model = WhisperModel("base", device="cpu", compute_type="int8")
     log.info("Ready — say '%s' to activate.", WAKE_WORD)

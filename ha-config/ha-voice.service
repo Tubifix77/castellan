@@ -1,6 +1,10 @@
 [Unit]
 Description=HA Voice Assistant (faster-whisper wake word)
-After=network.target sound.target
+# The voice loop is useless without the Docker half (HA intents, Piper TTS,
+# Ollama warm path), so it is ordered after and bound to the daemon: stopping
+# docker stops this, and it can never start before the stack is reachable.
+Requires=docker.service
+After=docker.service network.target sound.target
 
 [Service]
 Type=simple

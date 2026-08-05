@@ -25,20 +25,23 @@ echo ""
 
 if [ "$ESCALATION" = true ]; then
     echo "  Mode: LOCAL + CLOUD ESCALATION"
-    export CASTELLAN_ESCALATION=1
+    FLAG=1
 else
     echo "  Mode: LOCAL ONLY"
-    export CASTELLAN_ESCALATION=0
+    FLAG=0
 fi
 
-# Write mode flag for ha_voice.py to read
-echo "$CASTELLAN_ESCALATION" > /tmp/castellan_escalation
+# ha_voice.py reads this at startup, so it must be written before the unit
+# starts. /run is tmpfs — a reboot drops the opt-in back to local-only.
+sudo mkdir -p /run/castellan
+printf '%s\n' "$FLAG" | sudo tee /run/castellan/escalation >/dev/null
 
 echo ""
 echo "  Starting services..."
 cd /home/boas/homeassistant
 docker compose up -d
-sudo systemctl start ha-voice.service
+# enable, not start: matches `compose up -d`, which also survives a reboot
+sudo systemctl enable --now ha-voice.service
 
 sleep 4
 
@@ -47,7 +50,7 @@ echo "  ════════════════════════
 echo "  Castellan Status"
 echo "  ═══════════════════════════════════"
 docker ps --filter "name=homeassistant|wyoming|ollama" --format "  {{.Names}}: {{.Status}}"
-systemctl is-active ha-voice.service | xargs echo "  ha-voice:"
+echo "  ha-voice: $(systemctl is-active ha-voice.service) ($(systemctl is-enabled ha-voice.service))"
 echo "  ───────────────────────────────────"
 if [ "$ESCALATION" = true ]; then
     echo "  Cloud escalation: ENABLED"
