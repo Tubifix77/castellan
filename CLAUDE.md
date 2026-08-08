@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-Castellan is the **architecture and design** for a fully local, single-host smart home (Home Assistant + local voice + a small local LLM). It is **documentation-only and in the design phase (v0.4) — there is no code yet.** No build, test, lint, or run tooling exists. Work here today means editing Markdown design docs, not programs; treat changes as spec edits that must stay internally consistent and well-reasoned.
+Castellan is a fully local, single-host smart home (Home Assistant + local voice + a small local LLM). **Status: complete (v0.7)** — steps 1-7 of the build are shipped and running on the Debian laptop (voice core, warm-path LLM, opt-in cloud escalation, Lovelace dashboard, desktop start/stop launchers); step 8 (SoC migration to the Orange Pi target) is deliberately deferred until that hardware is in hand. See `README.md` for the current status line and `ARCHITECTURE.md` for the full spec. Two lifecycle/boundary defects found in the running system were fixed as of the last commit - no known open issues.
 
 ## The documents (and which is canonical)
 
