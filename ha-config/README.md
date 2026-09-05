@@ -1,6 +1,6 @@
 # ha-config
 
-Home Assistant configuration as deployed on the Debian laptop at `REDACTED-LAN-IP`.
+Home Assistant configuration as deployed on the Debian laptop.
 
 > **Archived.** The deployment was decommissioned on 2026-09-05 and the laptop wiped
 > of Castellan. This directory is the full record of what ran, kept so the system can
@@ -39,7 +39,7 @@ through HA's UI and live only in `.storage/`, so they must be re-added by hand:
 
 | Integration | Settings as deployed |
 |---|---|
-| WiZ (x3) | Auto-discovered on the LAN. `REDACTED-LAN-IP` (Living room Standing Lamp), `REDACTED-LAN-IP` (Reading Lamp), `REDACTED-LAN-IP` (Bedroom Light) |
+| WiZ (x3) | Auto-discovered on the LAN — no addresses needed. Give each bulb a friendly name, then make `ENTITIES` in `ha_voice.py` match those names (see below) |
 | Ollama | `http://localhost:11434`, model `qwen2.5:1.5b` |
 | Wyoming | `piper` :10200, `speech-to-phrase` :10300, `openwakeword` :10400 |
 | MCP Server | Domain `mcp_server`, exposed at `/api/mcp` |
@@ -62,7 +62,8 @@ Wake word: **"computer"** (say it clearly, the script uses biased Whisper decodi
 After wake: beep → speak command → beep → HA executes → Piper TTS reply  
 Signal chain: PulseAudio → parecord → 250 Hz HPF → faster-whisper base int8 → fuzzy entity match → HA Conversation API → Piper TTS → mpg123
 
-Known entities for fuzzy matching (update `ENTITIES` in `ha_voice.py` when adding devices):
+`ENTITIES` in `ha_voice.py` is the fuzzy-matching vocabulary and **must match the friendly names you
+give your bulbs in HA**, or spoken commands will not resolve. The deployed set was:
 - `living room standing lamp`
 - `reading lamp`
 - `bedroom light`

@@ -55,9 +55,9 @@ It was started and stopped via the desktop icons, which were the **only** lifecy
 
 ## Devices
 
-- Living room Standing Lamp — WiZ, `REDACTED-LAN-IP`
-- Reading Lamp — WiZ, `REDACTED-LAN-IP`
-- Bedroom Light — WiZ, `REDACTED-LAN-IP`
+Three WiZ WiFi bulbs — a living-room floor lamp, a reading lamp and a bedroom light. WiZ bulbs are
+auto-discovered by HA on the LAN, so no addresses need recording; the names below are just the
+friendly names that were set, and yours can be anything (see `ha-config/README.md`).
 
 ## Desktop launchers
 
