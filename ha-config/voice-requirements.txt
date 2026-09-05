@@ -1,0 +1,4 @@
+# Deps for the ha-voice venv (/home/boas/ha-voice-venv), Python 3.11.
+# Everything else in that venv was pulled in transitively.
+faster-whisper==1.2.1
+websocket-client==1.9.0

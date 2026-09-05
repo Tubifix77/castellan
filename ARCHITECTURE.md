@@ -1,10 +1,30 @@
 # Castellan — Architecture
 
-**Version:** 0.7
-**Status:** Build phase — roadmap steps 1–7 deployed and working on the host. Step 8 (SoC migration, energy management) is a future hardware project.
-**Last reviewed:** 2026-08-06
+**Version:** 0.8
+**Status:** **Archived.** Steps 1–7 were built, deployed and verified working on the host; the
+deployment was decommissioned on 2026-09-05 after going unused. Step 8 (SoC migration, energy
+management) was never started. This document is retained as the design record — it describes a
+system that ran, in the past tense of fact rather than aspiration.
+**Last reviewed:** 2026-09-05
 
 ## Changelog
+
+**v0.8 (2026-09-05):** — decommissioned.
+- **The deployment was removed from the host.** Not a failure: steps 1–7 worked, the voice loop,
+  warm path, escalation boundary, dashboard and custom intent all functioned as specified. It was
+  simply not used — the WiZ app already did what the household actually wanted from the lights, and
+  the ~12 s wake-to-action on this hardware never made voice the faster option for the one command
+  (`goodnight`) that had real value. That is the honest verdict on the design: the architecture was
+  sound and the latency budget of §3 was not.
+- **Repo verified as the complete record before the wipe.** All eight files shared between host and
+  repo were byte-identical. Three gaps were closed: `ha-mcp-proxy.sh` (§9) had never been committed
+  and carried an inline long-lived token — added, sanitised to read from `.env`; the three empty HA
+  `!include` stubs, without which HA will not boot; and `voice-requirements.txt`.
+- **`.storage/` deliberately not committed.** It held the 18 UI-configured integrations but also
+  auth refresh tokens and password hashes. Its reconstructable content is written up as a rebuild
+  checklist in `ha-config/README.md` instead.
+- **A second git repo existed on the host**, local-only with no remote, never pushed. Its content
+  matched this repo's, so nothing unique was lost.
 
 **v0.7 (2026-08-06):** — two lifecycle/boundary defects found in the running system and fixed.
 - **The two halves of Castellan had independent lifecycles (§10).** `castellan-stop.sh` called a bare `systemctl stop`, which is transient, while the unit stayed `enabled` — so `ha_voice.py` returned on the next boot and ran unattended for ~7 weeks after Castellan was "stopped", holding the mic. Start/stop now own `enable --now`/`disable --now`, matching `compose up -d`/`compose down`, and both scripts print `is-enabled` so the persistent state is visible. The unit gained `Requires=docker.service` + `After=docker.service`.
