@@ -6,6 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Castellan is a fully local, single-host smart home (Home Assistant + local voice + a small local LLM). **Status: archived — decommissioned 2026-09-05.** Steps 1-7 were built, deployed and verified working on the Debian laptop (voice core, warm-path LLM, opt-in cloud escalation, Lovelace dashboard, desktop start/stop launchers); step 8 (SoC migration) was never started. The deployment was removed from the host after going unused — the code worked, it just wasn't worth the ~12 s wake-to-action in daily life. **Nothing runs anymore, and there is no laptop deployment to SSH into**: treat this repo as a design record and rebuild archive, not a live system. Before you claim anything about what is deployed, re-read this line. See `README.md` (Decommissioning) and `ha-config/README.md` (Rebuilding from this repo).
 
+## Reaching the laptop
+
+The `ssh-remote` MCP server has been **removed and will not come back** (company policy allows
+official MCP servers only). Any instruction anywhere that calls `mcp__ssh-remote__ssh_exec`,
+`mcp__ssh-remote__ssh_read_file` or `mcp__ssh-remote__ssh_upload` is dead — use the built-in Bash
+tool instead:
+
+| Need | Command |
+|---|---|
+| Run something | `ssh homelab '<command>'` |
+| Copy up | `scp <local> homelab:<remote>` |
+| Copy down | `scp homelab:<remote> <local>` |
+
+`homelab` is an alias in the operator's `~/.ssh/config` — key-based with `BatchMode` on, so there
+are no password prompts and a dead connection fails immediately instead of hanging. The address
+lives in that config deliberately and **must not be written into this repo**: every private LAN
+address was purged from all history on 2026-09-05, so reintroducing one would undo that.
+
+**Ask before anything destructive on that laptop** — deleting files, restarting services, installing
+packages. This is not a spare box: Castellan is gone from it, but it still runs unrelated live
+services (Pi-hole, which is the LAN's DNS, and growing-spine), so a careless command has real blast
+radius and nothing there is Castellan's to clean up.
+
+Castellan itself is archived (see above), so this section applies to rebuild work, not to a running
+deployment.
+
 ## The documents (and which is canonical)
 
 - **`ARCHITECTURE.md` — the source of truth (full spec, v0.4).** Read it before any design change or build work. Numbered sections; the voice flow and "gaps closed" tables tie it together. Hard constraints, build order, and all load-bearing claims live here.
